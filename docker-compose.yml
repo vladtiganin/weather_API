@@ -1,0 +1,47 @@
+version: '3.9'
+
+
+services:
+  weather_api:
+    build: 
+      context: .
+      dockerfile: ./app/dockerfile
+    container_name: weather_api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    networks:
+      - weather_network
+    depends_on:
+      db:
+        condition: service_healthy
+
+  
+  db:
+    image: postgres:16
+    container_name: db
+    ports:
+      - "2222:5432"
+    networks:
+      - weather_network
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d db"]
+      interval: 1m30s
+      timeout: 30s
+      retries: 5
+      start_period: 30s
+
+  
+networks:
+  weather_network:
+    driver: bridge
+
+volumes:
+  postgres_data:
