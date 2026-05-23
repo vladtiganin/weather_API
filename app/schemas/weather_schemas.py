@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 
 
@@ -9,14 +9,24 @@ class CityWeatherData(BaseModel):
 
 
 class GetWeatherResponse(BaseModel):
-    city: str
+    city_name: str
+    timestamp: datetime
+    data: CityWeatherData
+
+
+class WeatherHistoryItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    city_name: str
     timestamp: datetime
     data: CityWeatherData
 
 
 class GetResponseHistory(BaseModel):
-    items: list[CityWeatherData]
+    items: list[WeatherHistoryItem]
     page: int
     limit: int
     total: int
+
 

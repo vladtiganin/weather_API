@@ -1,7 +1,9 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
+from sqlalchemy.exc import SQLAlchemyError
 from datetime import date
 
+from app.core.exception.exception import WeatherStorageError
 from app.models.request_model import RequestORM
 
 
@@ -15,30 +17,43 @@ class WeatherRepository:
             data=data
         )
 
-        self.session.add(req)
-        await self.session.commit()
-        await self.session.refresh(req)
+        try:
+            self.session.add(req)
+            await self.session.commit()
+            await self.session.refresh(req)
+        except SQLAlchemyError as exc:
+            await self.session.rollback()
+            raise WeatherStorageError() from exc
+
         return req
 
 
-    async def get_history(self, city: str, date_from: date, date_to: date, page: int, limit: int) -> list[RequestORM]:
+    async def get_history(self, city: str, date_from: date, date_to: date, page: int, limit: int) -> tuple[list[RequestORM], int]:
         statement = select(RequestORM)
 
         if city:
             statement = statement.where(RequestORM.city_name.ilike(f"%{city}%"))
 
         if date_from:
-            statement = statement.where(RequestORM.query_timestamp >= date_from)
+            statement = statement.where(RequestORM.timestamp >= date_from)
 
         if date_to:
-            statement = statement.where(RequestORM.query_timestamp <= date_to)
+            statement = statement.where(RequestORM.timestamp <= date_to)
 
-        statement = (
-            statement
-            .order_by(RequestORM.query_timestamp.desc())
-            .offset((page - 1) * limit)
-            .limit(limit)
-        )
+        try:
+            count_statement = select(func.count()).select_from(statement.subquery())
+            total = (await self.session.execute(count_statement)).scalar_one()
 
-        res = await self.session.execute(statement)
-        return res.scalars.all()
+
+            statement = (
+                statement
+                .order_by(RequestORM.timestamp.desc())
+                .offset((page - 1) * limit)
+                .limit(limit)
+            )
+
+            res = (await self.session.execute(statement)).scalars().all()
+        except SQLAlchemyError as exc:
+            raise WeatherStorageError() from exc
+
+        return res, total

@@ -16,7 +16,7 @@ router = APIRouter(
 @router.get("/", response_model=GetWeatherResponse)
 async def get_weather_endpoint(
     city: Annotated[str, Query(min_length=1, max_length=100)],
-    unit: Annotated[str, Literal["celsius", "fahrenheit"]],
+    unit: Annotated[Literal["celsius", "fahrenheit"], Query()],
     weather_service: WeatherService = Depends(get_weather_service_instance)
     
 ):
@@ -28,8 +28,8 @@ async def get_history(
     city: Annotated[str | None, Query(min_length=1, max_length=100)] = None,
     date_from: date | None = None,
     date_to: date | None = None,
-    page: Annotated[int, Query(ge=0)] = 0,
-    limit: Annotated[int, Query(ge=0, le=100)] = 10,
+    page: Annotated[int, Query(ge=1)] = 1,
+    limit: Annotated[int, Query(ge=1, le=100)] = 10,
     weather_service: WeatherService = Depends(get_weather_service_instance)
 ):
-    return await weather_service.get_weather_hostory(city, date_from, date_to, page, limit)
+    return await weather_service.get_weather_history(city, date_from, date_to, page, limit)
