@@ -3,6 +3,10 @@ from time import time
 from fastapi import Request, status
 from app.config import settings
 from app.core.exception.exception import TooManyRequestsError
+from app.core.logging import get_logger
+
+
+logger = get_logger(__name__)
 
 
 class RateLiimter:
@@ -38,5 +42,14 @@ async def rate_limit_by_ip(request: Request) -> None:
     client_ip = request.client.host if request.client else "unknown"
 
     if not rate_limiter.is_allowed(client_ip):
+        logger.warning(
+            "Rate limit rejected request",
+            extra={
+                "event": "rate_limit_rejected",
+                "client_ip": client_ip,
+                "max_requests": rate_limiter.max_requests,
+                "window_seconds": rate_limiter.window_seconds,
+            },
+        )
         raise TooManyRequestsError()
 

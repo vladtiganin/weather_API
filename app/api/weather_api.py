@@ -10,7 +10,11 @@ from app.schemas.weather_schemas import *
 from app.services.weather_service import WeatherService
 from app.core.dependencies import get_weather_service_instance
 from app.core.exception.exception import WeatherResponseFormatError
+from app.core.logging import get_logger
 from app.core.rate_limiter import rate_limit_by_ip
+
+
+logger = get_logger(__name__)
 
 router = APIRouter(
     prefix="/weather",
@@ -74,9 +78,29 @@ async def get_history_export_csv(
                 record.timestamp.isoformat(),
             ])
     except (KeyError, TypeError) as exc:
+        logger.warning(
+            "Weather history export record has unexpected data format",
+            exc_info=True,
+            extra={
+                "event": "history_export_record_format_failed",
+                "city_name": city,
+                "date_from": date_from,
+                "date_to": date_to,
+            },
+        )
         raise WeatherResponseFormatError() from exc
 
     output.seek(0)
+    logger.info(
+        "Weather history CSV export created",
+        extra={
+            "event": "history_export_csv_created",
+            "records_count": len(records),
+            "city_name": city,
+            "date_from": date_from,
+            "date_to": date_to,
+        },
+    )
 
     return StreamingResponse(
         iter([output.getvalue()]),

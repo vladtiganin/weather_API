@@ -5,7 +5,11 @@ from datetime import date, datetime, timezone, timedelta
 from datetime import time
 
 from app.core.exception.exception import WeatherStorageError
+from app.core.logging import get_logger
 from app.models.request_model import RequestORM
+
+
+logger = get_logger(__name__)
 
 
 class WeatherRepository:
@@ -30,7 +34,25 @@ class WeatherRepository:
             await self.session.refresh(req)
         except SQLAlchemyError as exc:
             await self.session.rollback()
+            logger.exception(
+                "Failed to insert weather record",
+                extra={
+                    "event": "weather_record_insert_failed",
+                    "city_name": city,
+                    "served_from_cache": served_from_cache,
+                },
+            )
             raise WeatherStorageError() from exc
+
+        logger.info(
+            "Weather record inserted",
+            extra={
+                "event": "weather_record_inserted",
+                "request_id": req.id,
+                "city_name": req.city_name,
+                "served_from_cache": req.served_from_cache,
+            },
+        )
 
         return req
 
@@ -61,7 +83,31 @@ class WeatherRepository:
 
             res = (await self.session.execute(statement)).scalars().all()
         except SQLAlchemyError as exc:
+            logger.exception(
+                "Failed to query weather history",
+                extra={
+                    "event": "history_query_failed",
+                    "city_name": city,
+                    "page": page,
+                    "limit": limit,
+                    "date_from": date_from,
+                    "date_to": date_to,
+                },
+            )
             raise WeatherStorageError() from exc
+
+        logger.info(
+            "Weather history query completed",
+            extra={
+                "event": "history_query_completed",
+                "city_name": city,
+                "page": page,
+                "limit": limit,
+                "date_from": date_from,
+                "date_to": date_to,
+                "total": total,
+            },
+        )
 
         return res, total
 
@@ -82,6 +128,14 @@ class WeatherRepository:
         try:
             result = await self.session.execute(statement)
         except SQLAlchemyError as exc:
+            logger.exception(
+                "Failed to query cached weather record",
+                extra={
+                    "event": "weather_cache_lookup_failed",
+                    "city_name": city,
+                    "unit": unit,
+                },
+            )
             raise WeatherStorageError() from exc
 
         return result.scalar_one_or_none()
@@ -105,10 +159,30 @@ class WeatherRepository:
             statement = statement.order_by(RequestORM.timestamp.desc())
             result = await self.session.execute(statement)
         except SQLAlchemyError as exc:
+            logger.exception(
+                "Failed to export weather history",
+                extra={
+                    "event": "history_export_query_failed",
+                    "city_name": city,
+                    "date_from": date_from,
+                    "date_to": date_to,
+                },
+            )
             raise WeatherStorageError() from exc
 
-        return list(result.scalars().all())
+        records = list(result.scalars().all())
+        logger.info(
+            "Weather history export query completed",
+            extra={
+                "event": "history_export_query_completed",
+                "city_name": city,
+                "date_from": date_from,
+                "date_to": date_to,
+                "records_count": len(records),
+            },
+        )
 
+        return records
 
 
 

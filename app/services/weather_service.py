@@ -10,8 +10,12 @@ from app.core.exception.exception import (
     WeatherProviderError,
     WeatherResponseFormatError,
 )
+from app.core.logging import get_logger
 from app.repositories.weather_repo import WeatherRepository
 from app.models.request_model import RequestORM
+
+
+logger = get_logger(__name__)
 
 
 class WeatherService():
@@ -21,6 +25,15 @@ class WeatherService():
 
     async def get_weather(self, city: str, unit: str) -> GetWeatherResponse:
         city = city.capitalize()
+        logger.info(
+            "Weather request started",
+            extra={
+                "event": "weather_request_started",
+                "city_name": city,
+                "unit": unit,
+            },
+        )
+
         openweather_unit = {
             "celsius": "metric",
             "fahrenheit": "imperial",
@@ -28,6 +41,16 @@ class WeatherService():
 
         last_query = await self.weather_repo.get_cached_record(city, unit)
         if last_query is not None:
+            logger.info(
+                "Weather cache hit",
+                extra={
+                    "event": "weather_cache_hit",
+                    "city_name": city,
+                    "unit": unit,
+                    "cached_request_id": last_query.id,
+                },
+            )
+
             try:
                 cached_data = last_query.data
                 if not isinstance(cached_data, dict):
@@ -37,12 +60,32 @@ class WeatherService():
                 cached_data["temp"]
                 cached_data["units"]
             except (KeyError, TypeError) as exc:
+                logger.warning(
+                    "Cached weather data has unexpected format",
+                    exc_info=True,
+                    extra={
+                        "event": "weather_cached_response_format_failed",
+                        "city_name": city,
+                        "unit": unit,
+                        "cached_request_id": last_query.id,
+                    },
+                )
                 raise WeatherResponseFormatError() from exc
 
             orm = await self.weather_repo.add_weather_query(
                 city=last_query.city_name,
                 data=cached_data,
                 served_from_cache=True
+            )
+
+            logger.info(
+                "Weather response saved",
+                extra={
+                    "event": "weather_response_saved",
+                    "request_id": orm.id,
+                    "city_name": orm.city_name,
+                    "served_from_cache": orm.served_from_cache,
+                },
             )
 
             return {
@@ -52,7 +95,25 @@ class WeatherService():
                 "data": orm.data,
             }
 
+        logger.info(
+            "Weather cache miss",
+            extra={
+                "event": "weather_cache_miss",
+                "city_name": city,
+                "unit": unit,
+            },
+        )
+
         try:
+            logger.info(
+                "Weather provider request started",
+                extra={
+                    "event": "weather_provider_request_started",
+                    "city_name": city,
+                    "unit": unit,
+                },
+            )
+
             async with AsyncClient() as client:
                 response = await client.post(
                     url="https://api.openweathermap.org/data/2.5/weather",
@@ -65,9 +126,28 @@ class WeatherService():
 
             response.raise_for_status()
         except RequestError as exc:
+            logger.warning(
+                "Weather provider request failed",
+                exc_info=True,
+                extra={
+                    "event": "weather_provider_request_failed",
+                    "city_name": city,
+                    "unit": unit,
+                },
+            )
             raise WeatherProviderError(city) from exc
         except HTTPStatusError as exc:
             status_code = exc.response.status_code
+            logger.warning(
+                "Weather provider returned error response",
+                exc_info=True,
+                extra={
+                    "event": "weather_provider_request_failed",
+                    "city_name": city,
+                    "unit": unit,
+                    "provider_status_code": status_code,
+                },
+            )
 
             if status_code == 404:
                 raise CityNotFoundError(city) from exc
@@ -88,16 +168,46 @@ class WeatherService():
                 
             }
         except (KeyError, IndexError, TypeError, ValueError) as exc:
+            logger.warning(
+                "Weather provider response has unexpected format",
+                exc_info=True,
+                extra={
+                    "event": "weather_provider_response_format_failed",
+                    "city_name": city,
+                    "unit": unit,
+                },
+            )
             raise WeatherResponseFormatError() from exc
 
         orm = await self.weather_repo.add_weather_query(city=city, data=res["data"])
         res.update({"timestamp": orm.timestamp})
         res.update({"served_from_cache": orm.served_from_cache})
+        logger.info(
+            "Weather response saved",
+            extra={
+                "event": "weather_response_saved",
+                "request_id": orm.id,
+                "city_name": orm.city_name,
+                "served_from_cache": orm.served_from_cache,
+            },
+        )
 
         return res
 
 
     async def get_weather_history(self, city: str, page: int, limit: int, date_from: date | None = None, date_to: date | None = None) -> GetResponseHistory:
+        logger.info(
+            "Weather history requested",
+            extra={
+                "event": "history_requested",
+                "city_name": city,
+                "page": page,
+                "limit": limit,
+                "date_from": date_from,
+                "date_to": date_to,
+            },
+        )
+
         if date_from and date_to and date_from > date_to:
             raise InvalidHistoryRangeError(date_from, date_to)
 
@@ -114,11 +224,20 @@ class WeatherService():
 
 
     async def get_weather_history_export(self, city: str, date_from: date | None = None, date_to: date | None = None) -> list[RequestORM]:
+        logger.info(
+            "Weather history export requested",
+            extra={
+                "event": "history_export_requested",
+                "city_name": city,
+                "date_from": date_from,
+                "date_to": date_to,
+            },
+        )
+
         if date_from and date_to and date_from > date_to:
             raise InvalidHistoryRangeError(date_from, date_to)
 
         return await self.weather_repo.get_weather_history_export(city, date_from, date_to)
-
 
 
 
