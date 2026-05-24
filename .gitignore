@@ -1,7 +1,5 @@
 venv/
-*.txt
 __pycache__/
 *.pyc
-alembic.ini
 migration/
 .env
