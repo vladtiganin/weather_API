@@ -25,6 +25,31 @@ class WeatherService():
             "fahrenheit": "imperial",
         }[unit]
 
+        last_query = await self.weather_repo.get_cached_record(city, unit)
+        if last_query is not None:
+            try:
+                cached_data = last_query.data
+                if not isinstance(cached_data, dict):
+                    raise TypeError
+
+                cached_data["description"]
+                cached_data["temp"]
+                cached_data["units"]
+            except (KeyError, TypeError) as exc:
+                raise WeatherResponseFormatError() from exc
+
+            orm = await self.weather_repo.add_weather_query(
+                city=last_query.city_name,
+                data=cached_data,
+                served_from_cache=True
+            )
+
+            return {
+                "city_name": orm.city_name,
+                "timestamp": orm.timestamp,
+                "served_from_cache": orm.served_from_cache,
+                "data": orm.data,
+            }
 
         try:
             async with AsyncClient() as client:
@@ -66,6 +91,7 @@ class WeatherService():
 
         orm = await self.weather_repo.add_weather_query(city=city, data=res["data"])
         res.update({"timestamp": orm.timestamp})
+        res.update({"served_from_cache": orm.served_from_cache})
 
         return res
 
@@ -84,5 +110,3 @@ class WeatherService():
         }
 
         return res
-
-

@@ -11,6 +11,7 @@ class CityWeatherData(BaseModel):
 class GetWeatherResponse(BaseModel):
     city_name: str
     timestamp: datetime
+    served_from_cache: bool 
     data: CityWeatherData
 
 

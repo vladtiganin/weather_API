@@ -1,7 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.exc import SQLAlchemyError
-from datetime import date
+from datetime import date, datetime, timezone, timedelta
 
 from app.core.exception.exception import WeatherStorageError
 from app.models.request_model import RequestORM
@@ -11,10 +11,16 @@ class WeatherRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def add_weather_query(self, city: str, data: dict) -> RequestORM:
+    async def add_weather_query(
+        self,
+        city: str,
+        data: dict,
+        served_from_cache: bool = False
+    ) -> RequestORM:
         req = RequestORM(
             city_name=city,
-            data=data
+            data=data,
+            served_from_cache=served_from_cache
         )
 
         try:
@@ -57,3 +63,24 @@ class WeatherRepository:
             raise WeatherStorageError() from exc
 
         return res, total
+
+
+    async def get_cached_record(self, city: str, unit: str) -> RequestORM | None :
+        five_minutes_ago = datetime.now(timezone.utc) - timedelta(minutes=5)
+
+        statement = (
+            select(RequestORM)
+            .where(RequestORM.city_name == city)
+            .where(RequestORM.data["units"].as_string() == unit)
+            .where(RequestORM.served_from_cache.is_(False))
+            .where(RequestORM.timestamp >= five_minutes_ago)
+            .order_by(RequestORM.timestamp.desc())
+            .limit(1)
+        )
+
+        try:
+            result = await self.session.execute(statement)
+        except SQLAlchemyError as exc:
+            raise WeatherStorageError() from exc
+
+        return result.scalar_one_or_none()
