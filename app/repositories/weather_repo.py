@@ -2,6 +2,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.exc import SQLAlchemyError
 from datetime import date, datetime, timezone, timedelta
+from datetime import time
 
 from app.core.exception.exception import WeatherStorageError
 from app.models.request_model import RequestORM
@@ -34,7 +35,7 @@ class WeatherRepository:
         return req
 
 
-    async def get_history(self, city: str, date_from: date, date_to: date, page: int, limit: int) -> tuple[list[RequestORM], int]:
+    async def get_history(self, city: str, page: int, limit: int, date_from: date | None = None, date_to: date | None = None) -> tuple[list[RequestORM], int]:
         statement = select(RequestORM)
 
         if city:
@@ -84,3 +85,33 @@ class WeatherRepository:
             raise WeatherStorageError() from exc
 
         return result.scalar_one_or_none()
+
+
+    async def get_weather_history_export(self, city: str, date_from: date | None = None, date_to: date | None = None) -> list[RequestORM]:
+        statement = select(RequestORM)
+
+        if city:
+            statement = statement.where(RequestORM.city_name.ilike(f"%{city}%"))
+
+        if date_from:
+            date_from_dt = datetime.combine(date_from, time.min)
+            statement = statement.where(RequestORM.timestamp >= date_from_dt)
+
+        if date_to:
+            date_to_dt = datetime.combine(date_to, time.max)
+            statement = statement.where(RequestORM.timestamp <= date_to_dt)
+
+        try:
+            statement = statement.order_by(RequestORM.timestamp.desc())
+            result = await self.session.execute(statement)
+        except SQLAlchemyError as exc:
+            raise WeatherStorageError() from exc
+
+        return list(result.scalars().all())
+
+
+
+
+
+
+

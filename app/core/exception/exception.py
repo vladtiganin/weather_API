@@ -79,6 +79,16 @@ class InvalidHistoryRangeError(AppException):
         )
 
 
+class TooManyRequestsError(AppException):
+    def __init__(self):
+        super().__init__(
+            status_code=429,
+            code=ExceptionCode.TOO_MANY_REQUESTS,
+            message="Too many requests. Please try again later.",
+            details={}
+        )
+
+
 
 
 

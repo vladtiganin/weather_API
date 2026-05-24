@@ -6,6 +6,9 @@ class Settings(BaseSettings):
     db_dns: str
     local_migration_db_dns: str 
 
+    rate_limit_requests: int = 30
+    rate_limit_window_seconds: int = 60
+
     model_config = SettingsConfigDict(
         env_file="app/.env",
         env_file_encoding="utf-8"

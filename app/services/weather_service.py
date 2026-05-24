@@ -11,6 +11,7 @@ from app.core.exception.exception import (
     WeatherResponseFormatError,
 )
 from app.repositories.weather_repo import WeatherRepository
+from app.models.request_model import RequestORM
 
 
 class WeatherService():
@@ -96,11 +97,11 @@ class WeatherService():
         return res
 
 
-    async def get_weather_history(self, city: str, date_from: date, date_to: date, page: int, limit: int) -> GetResponseHistory:
+    async def get_weather_history(self, city: str, page: int, limit: int, date_from: date | None = None, date_to: date | None = None) -> GetResponseHistory:
         if date_from and date_to and date_from > date_to:
             raise InvalidHistoryRangeError(date_from, date_to)
 
-        history, total = await self.weather_repo.get_history(city, date_from, date_to, page, limit)
+        history, total = await self.weather_repo.get_history(city, page, limit, date_from, date_to)
 
         res = {
             "items": history,
@@ -110,3 +111,19 @@ class WeatherService():
         }
 
         return res
+
+
+    async def get_weather_history_export(self, city: str, date_from: date | None = None, date_to: date | None = None) -> list[RequestORM]:
+        if date_from and date_to and date_from > date_to:
+            raise InvalidHistoryRangeError(date_from, date_to)
+
+        return await self.weather_repo.get_weather_history_export(city, date_from, date_to)
+
+
+
+
+
+
+
+
+
