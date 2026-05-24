@@ -1,4 +1,7 @@
-from fastapi import FastAPI
+from time import perf_counter
+from uuid import uuid4
+
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from httpx import AsyncClient
 from sqlalchemy import text
@@ -27,6 +30,58 @@ logger.info(
     "Application started",
     extra={"event": "app_started"},
 )
+
+
+@app.middleware("http")
+async def log_request_lifecycle(request: Request, call_next):
+    request_id = str(uuid4())
+    started_at = perf_counter()
+    client_ip = request.client.host if request.client else "unknown"
+
+    logger.info(
+        "Request started",
+        extra={
+            "event": "request_started",
+            "request_id": request_id,
+            "method": request.method,
+            "path": request.url.path,
+            "client_ip": client_ip,
+        },
+    )
+
+    try:
+        response = await call_next(request)
+    except Exception:
+        duration_ms = round((perf_counter() - started_at) * 1000, 2)
+        logger.exception(
+            "Request failed",
+            extra={
+                "event": "request_failed",
+                "request_id": request_id,
+                "method": request.method,
+                "path": request.url.path,
+                "client_ip": client_ip,
+                "duration_ms": duration_ms,
+            },
+        )
+        raise
+
+    duration_ms = round((perf_counter() - started_at) * 1000, 2)
+    logger.info(
+        "Request finished",
+        extra={
+            "event": "request_finished",
+            "request_id": request_id,
+            "method": request.method,
+            "path": request.url.path,
+            "client_ip": client_ip,
+            "status_code": response.status_code,
+            "duration_ms": duration_ms,
+        },
+    )
+
+    return response
+
 
 @app.get("/")
 def root():

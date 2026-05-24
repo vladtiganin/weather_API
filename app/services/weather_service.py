@@ -1,5 +1,6 @@
 from httpx import AsyncClient, HTTPStatusError, RequestError
 from datetime import date
+from time import perf_counter
 
 from app.schemas.weather_schemas import *
 from app.config import settings
@@ -114,8 +115,9 @@ class WeatherService():
                 },
             )
 
+            provider_started_at = perf_counter()
             async with AsyncClient() as client:
-                response = await client.post(
+                response = await client.get(
                     url="https://api.openweathermap.org/data/2.5/weather",
                     params={
                         "q": city,
@@ -123,9 +125,22 @@ class WeatherService():
                         "appid": settings.weather_api_key
                     }
                 )
+            provider_latency_ms = round((perf_counter() - provider_started_at) * 1000, 2)
+
+            logger.info(
+                "Weather provider request finished",
+                extra={
+                    "event": "weather_provider_request_finished",
+                    "city_name": city,
+                    "unit": unit,
+                    "provider_status_code": response.status_code,
+                    "latency_ms": provider_latency_ms,
+                },
+            )
 
             response.raise_for_status()
         except RequestError as exc:
+            provider_latency_ms = round((perf_counter() - provider_started_at) * 1000, 2)
             logger.warning(
                 "Weather provider request failed",
                 exc_info=True,
@@ -133,6 +148,7 @@ class WeatherService():
                     "event": "weather_provider_request_failed",
                     "city_name": city,
                     "unit": unit,
+                    "latency_ms": provider_latency_ms,
                 },
             )
             raise WeatherProviderError(city) from exc
@@ -238,7 +254,6 @@ class WeatherService():
             raise InvalidHistoryRangeError(date_from, date_to)
 
         return await self.weather_repo.get_weather_history_export(city, date_from, date_to)
-
 
 
 

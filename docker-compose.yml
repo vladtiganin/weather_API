@@ -8,11 +8,15 @@ services:
     restart: unless-stopped
     ports:
       - "8000:8000"
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    command: >
+      sh -c "alembic upgrade head &&
+      uvicorn app.main:app --host 0.0.0.0 --port 8000"
     networks:
       - weather_network
     env_file:
       - ./app/.env
+    environment:
+      LOCAL_MIGRATION_DB_DNS: postgresql+psycopg://postgres:postgres@db:5432/db
     depends_on:
       db:
         condition: service_healthy
